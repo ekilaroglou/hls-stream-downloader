@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>HLS Stream Downloader</title>
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      body {
+        width: 380px;
+        padding: 14px;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .page {
+        margin: 10px 2px 12px;
+        font-size: 12.5px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #list {
+        display: grid;
+        gap: 10px;
+      }
+      .video {
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+      }
+      .video-head {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .video-title {
+        font-weight: 650;
+        font-size: 14.5px;
+        margin-bottom: 4px;
+        letter-spacing: -0.01em;
+      }
+      .loaded-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12.5px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .loaded-row strong {
+        color: var(--text-2);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .actions {
+        display: grid;
+        gap: 8px;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+      .empty {
+        padding: 26px 18px;
+        text-align: center;
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+      }
+      .empty .thumb {
+        margin-bottom: 6px;
+      }
+      .empty strong {
+        font-size: 14.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand"><span class="logo" id="logo"></span>HLS Stream Downloader</div>
+      <button class="icon-btn" id="settings" title="Settings" aria-label="Settings"></button>
+    </header>
+    <p class="page" id="page"></p>
+    <main id="list" aria-live="polite"></main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

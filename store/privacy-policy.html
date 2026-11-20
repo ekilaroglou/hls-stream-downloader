@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — HLS Stream Downloader</title>
+    <style>
+      :root { --bg: #ffffff; --text: #0f172a; --muted: #64748b; --border: #e3e7ef; --accent: #4f46e5; --soft: #f6f7fb; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #0b0e15; --text: #e9ecf5; --muted: #8d97ad; --border: #252c3d; --accent: #8b93ff; --soft: #141824; }
+      }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; }
+      main { max-width: 780px; margin: 0 auto; padding: 40px 16px 64px; }
+      h1 { font-size: 28px; line-height: 1.25; margin: 0 0 4px; letter-spacing: -0.015em; }
+      h2 { font-size: 19px; margin: 32px 0 8px; }
+      .date { color: var(--muted); margin: 0 0 24px; }
+      .summary { background: var(--soft); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+      a { color: var(--accent); }
+      code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
+      .table { overflow-x: auto; }
+      table { border-collapse: collapse; width: 100%; font-size: 15px; }
+      th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+      th { font-weight: 600; background: var(--soft); }
+      li { margin: 4px 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy — HLS Stream Downloader</h1>
+      <p class="date">Effective date: November 20, 2026</p>
+      <p>HLS Stream Downloader ("the extension") saves HLS video streams that the web page you are watching plays as a file on your computer. This policy explains what information the extension handles and what it does with it.</p>
+      <p class="summary"><strong>In short: everything happens in your browser. The extension does not send any information to the developer or to anyone else, and it has no servers, analytics, ads or tracking.</strong></p>
+      <h2>What the extension handles, and why</h2>
+      <div class="table"><table><thead><tr><th>Information</th><th>Why it is needed</th><th>Where it stays</th></tr></thead><tbody><tr><td>Addresses (URLs) of network requests made by web pages, and the <code>Content-Type</code> of their responses</td><td>To notice when a page loads an HLS video playlist (<code>.m3u8</code>). Requests are only observed, never blocked or changed. Only playlist addresses are kept.</td><td>Kept in your browser's session storage for that tab only</td></tr><tr><td>Content of HLS playlists that pages load</td><td>To recognize playlists that don't end in <code>.m3u8</code>, the extension looks at the first bytes of text responses that pages receive; a playlist starts with <code>#EXTM3U</code>. Playlists are kept to list the videos and qualities without downloading them again. Other responses are not kept.</td><td>Kept in your browser's session storage for that tab only</td></tr><tr><td>Short codes (hashes) of the video parts a page has loaded, computed from their addresses</td><td>To know which parts are already in your browser, so <strong>Save loaded part</strong> can save them without new requests and <strong>Download full video</strong> doesn't load them again. The addresses themselves are not kept.</td><td>Kept in your browser's session storage for that tab only</td></tr><tr><td>The details of a download you start (the video's address, the tab and its title)</td><td>So the download tab can find the video. The tab opens with a short random link (<code>#id</code>) instead of the address.</td><td>Kept in your browser's session storage; deleted when the file is saved or the download is cancelled, and after 30 minutes at the latest</td></tr><tr><td>The title of the tab you are using the extension on</td><td>Shown in the extension and used as the name of the saved file</td><td>Not stored apart from the download details above</td></tr><tr><td>The video itself (playlist, decryption key for standard HLS AES-128, video segments)</td><td>Only when you click <strong>Save loaded part</strong>, <strong>Download full video</strong> or <strong>Record</strong>. Parts the page already loaded are taken from your browser's cache; with <strong>Download full video</strong>, the remaining parts are loaded from the website that serves the video. Everything is combined into one file.</td><td>Saved through Chrome's download manager (your Downloads folder, or where you choose in the Save As window), or written to the folder you chose in Settings</td></tr><tr><td>Your settings: download speed and where to save</td><td>To remember your choices</td><td>Stored in your browser's local extension storage</td></tr><tr><td>The folder you choose in Settings (if you choose one)</td><td>To save videos there. Chrome gives the extension access to that one folder only, without its full path, and asks you again from time to time</td><td>Stored in the extension's IndexedDB in your browser; replaced when you choose another folder</td></tr></tbody></table></div>
+      <p>Session storage is held in memory by Chrome and is not readable by websites. The extension removes a tab's entries when the tab is closed, and Chrome clears all of it when the browser closes.</p>
+      <h2>What the extension does not do</h2>
+      <ul><li>It does not send any data to the developer, to third parties or to any server other than the website you are downloading a video from.</li><li>It does not collect personal information, browsing history, passwords, form data or payment information.</li><li>It does not read or change your cookies. When you download a video, the requests are made from the page that plays it, so the website receives the same cookies and headers it already receives from your browser while you watch.</li><li>It does not use analytics, advertising, tracking or remote code. All of its code is included in the extension package.</li><li>It does not sell, share or transfer any data.</li></ul>
+      <h2>Website requests made for downloads</h2>
+      <p><strong>Save loaded part</strong> takes only what the page already loaded from your browser's cache and makes no new requests to the website. When you click <strong>Download full video</strong> or <strong>Record</strong>, the extension requests the video's remaining segments from the website (or its content delivery network) that serves the video, in the same way the website's own video player does. Those requests are subject to that website's own privacy policy.</p>
+      <h2>Permissions</h2>
+      <ul><li><strong>Access to websites (all sites):</strong> videos can be on any website and are often served from other domains. This lets the extension detect playlists on the page you are watching and load the video from that page when you ask for it.</li><li><strong>webRequest:</strong> to see when a page loads an HLS playlist, and which video parts it has finished loading.</li><li><strong>scripting:</strong> to load the video from inside the page that plays it.</li><li><strong>downloads:</strong> to save the finished file.</li><li><strong>storage:</strong> to remember the videos and loaded parts found on open tabs and the details of a running download (session storage), and your settings.</li></ul>
+      <h2>Chrome Web Store Limited Use</h2>
+      <p>The use of information received by the extension adheres to the <a href="https://developer.chrome.com/docs/webstore/program-policies/">Chrome Web Store User Data Policy</a>, including the Limited Use requirements. Information is used only to provide the extension's single purpose: saving video streams that you choose to download.</p>
+      <h2>Children</h2>
+      <p>The extension is not directed at children and does not knowingly handle information about children.</p>
+      <h2>Changes</h2>
+      <p>If this policy changes, the new version will be published at this address with a new effective date.</p>
+      <h2>Contact</h2>
+      <p>Questions about this policy: <strong>[your contact email]</strong></p>
+    </main>
+  </body>
+</html>
