@@ -14,10 +14,10 @@ or to anyone else, and it has no servers, analytics, ads or tracking.**
 |---|---|---|
 | Addresses (URLs) of network requests made by web pages, and the `Content-Type` of their responses | To notice when a page loads an HLS video playlist (`.m3u8`). Requests are only observed, never blocked or changed. Only playlist addresses are kept. | Kept in your browser's session storage for that tab only |
 | Content of HLS playlists that pages load | To recognize playlists that don't end in `.m3u8`, the extension looks at the first bytes of text responses that pages receive; a playlist starts with `#EXTM3U`. Playlists are kept to list the videos and qualities without downloading them again. Other responses are not kept. | Kept in your browser's session storage for that tab only |
-| Short codes (hashes) of the video parts a page has loaded, computed from their addresses | To know which parts are already in your browser, so **Save loaded part** can save them without new requests and **Download full video** doesn't load them again. The addresses themselves are not kept. | Kept in your browser's session storage for that tab only |
+| Short codes (hashes) computed from the addresses and byte ranges of media parts | To identify parts the player has loaded that may still be available from the browser's cache. | Kept in your browser's session storage for that tab only |
 | The details of a download you start (the video's address, the tab and its title) | So the download tab can find the video. The tab opens with a short random link (`#id`) instead of the address. | Kept in your browser's session storage; deleted when the file is saved or the download is cancelled, and after 30 minutes at the latest |
 | The title of the tab you are using the extension on | Shown in the extension and used as the name of the saved file | Not stored apart from the download details above |
-| The video itself (playlist, decryption key for standard HLS AES-128, video segments) | Only when you click **Save loaded part**, **Download full video** or **Record**. Parts the page already loaded are taken from your browser's cache; with **Download full video**, the remaining parts are loaded from the website that serves the video. Everything is combined into one file. | Saved through Chrome's download manager (your Downloads folder, or where you choose in the Save As window), or written to the folder you chose in Settings |
+| Media playlists, initialization data, standard HLS AES-128 keys, and media segments | To list available streams, save the selected media, and verify retained parts when resuming. Chrome uses cached responses when available. | Processed in your browser. The finished video is saved to the destination you choose. |
 | Your settings: download speed and where to save | To remember your choices | Stored in your browser's local extension storage |
 | The folder you choose in Settings (if you choose one) | To save videos there. Chrome gives the extension access to that one folder only, without its full path, and asks you again from time to time | Stored in the extension's IndexedDB in your browser; replaced when you choose another folder |
 
@@ -38,8 +38,11 @@ entries when the tab is closed, and Chrome clears all of it when the browser clo
 
 ## Website requests made for downloads
 
-**Save loaded part** takes only what the page already loaded from your browser's cache and makes no new
-requests to the website. When you click **Download full video** or **Record**, the extension requests the video's
+**Save loaded part** collects media segments the player previously loaded with cacheable response headers.
+The latest response for a segment or byte range determines whether it is eligible. Chrome may request an eligible
+segment again if its cached copy is unavailable. Playlists, initialization data and encryption keys may also be
+requested when needed. Resuming a download re-reads a few parts it already has, to verify that it is the same video.
+When you click **Download full video** or **Record**, the extension requests the video's
 remaining segments from the website (or its content delivery network) that serves the video, in the same way the
 website's own video player does. Those requests are subject to that website's own privacy policy.
 
@@ -71,4 +74,4 @@ If this policy changes, the new version will be published at this address with a
 
 ## Contact
 
-Questions about this policy: **[your contact email]**
+Questions about this policy: open an issue at [github.com/ekilaroglou/hls-stream-downloader/issues](https://github.com/ekilaroglou/hls-stream-downloader/issues).

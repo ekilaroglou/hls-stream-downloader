@@ -8,15 +8,31 @@
   const EVENT = 'hls-downloader:playlist';
   const MAX_PLAYLIST_BYTES = 8 * 1024 * 1024;
   const MAGIC = '#EXTM3U';
-  const reported = new Set();
+  const MAX_REMEMBERED = 200;
+  const reported = new Map(); // url -> hash of the text last reported for it
 
   const isPlaylistStart = (text) => text.replace(/^﻿/, '').trimStart().startsWith(MAGIC);
 
+  // Live playlists change at the same address, sometimes keeping the same
+  // length: compare a hash of the whole text, not just its length.
+  function hashText(text) {
+    let h1 = 0xdeadbeef;
+    let h2 = 0x41c6ce57;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    return `${(h1 >>> 0).toString(36)}${(h2 >>> 0).toString(36)}${text.length}`;
+  }
+
   function report(url, text) {
     if (!url || typeof text !== 'string' || !isPlaylistStart(text)) return;
-    const key = `${url}\n${text.length}`;
-    if (reported.has(key)) return;
-    reported.add(key);
+    const hash = hashText(text);
+    if (reported.get(url) === hash) return;
+    reported.delete(url);
+    reported.set(url, hash);
+    if (reported.size > MAX_REMEMBERED) reported.delete(reported.keys().next().value);
     document.dispatchEvent(new CustomEvent(EVENT, { detail: JSON.stringify({ url, text }) }));
   }
 

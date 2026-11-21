@@ -2,10 +2,9 @@
 // player iframe) that loaded them:
 //  - by network request: URLs ending in .m3u8, or responses with an HLS content type
 //  - by content: content/hook.js reports any response that starts with #EXTM3U
-// It also notes which media segments each tab has loaded (as short hashes),
-// so the parts already in the browser can be saved without new requests.
+// It also tracks cacheable media responses in each tab using short hashes.
 // It only observes what the page loads anyway; it never sends requests itself.
-import { requestId, loadedKey } from './lib/loaded.js';
+import { requestId, loadedKey, hash53 } from './lib/loaded.js';
 import { iconWithCount, PLAIN_ICON } from './lib/toolbar-icon.js';
 import { streamKey, countVideos, isMasterStream } from './lib/streams.js';
 
@@ -71,7 +70,7 @@ function addStream({ tabId, frameId }, url, text) {
   }
   if (!known.has(tabId)) known.set(tabId, new Map());
   const seen = known.get(tabId);
-  const fingerprint = `${frameId}|${url}|${text?.length ?? ''}`;
+  const fingerprint = `${frameId}|${url}|${text === undefined ? '' : hash53(text)}`; // live playlists change at the same address
   if (seen.get(key) === fingerprint) return;
   seen.set(key, fingerprint);
 
@@ -104,13 +103,13 @@ function resetTab(tabId) {
 
 // ---------------------------------------------------------------- loaded segments
 
-const loaded = new Map(); // tabId -> { ids: Set, ready: Promise, timer }
+const loaded = new Map(); // tabId -> { ids: Set, ready: Promise, writing: Promise, timer }
 const closedTabs = new Set(); // tab IDs aren't reused while the browser runs
 
 function loadedFor(tabId) {
   let entry = loaded.get(tabId);
   if (!entry) {
-    entry = { ids: new Set(), timer: null };
+    entry = { ids: new Set(), timer: null, writing: Promise.resolve() };
     const key = loadedKey(tabId);
     entry.ready = chrome.storage.session.get(key).then((r) => (r[key] || []).forEach((id) => entry.ids.add(id)));
     loaded.set(tabId, entry);
@@ -118,29 +117,33 @@ function loadedFor(tabId) {
   return entry;
 }
 
-async function markLoaded(tabId, ids) {
+function persistLoaded(tabId, entry) {
+  clearTimeout(entry.timer);
+  entry.timer = null;
+  entry.writing = entry.writing.then(async () => {
+    if (closedTabs.has(tabId)) return;
+    if (entry.ids.size > MAX_LOADED_PER_TAB) entry.ids = new Set([...entry.ids].slice(-MAX_LOADED_PER_TAB));
+    await chrome.storage.session.set({ [loadedKey(tabId)]: [...entry.ids] });
+  }).catch((e) => console.warn('Loaded segments:', e));
+}
+
+async function updateLoaded(tabId, ids, cacheable) {
   if (closedTabs.has(tabId)) return;
   const entry = loadedFor(tabId);
   await entry.ready;
   let changed = false;
   for (const id of ids) {
-    if (!entry.ids.has(id)) {
+    if (cacheable && !entry.ids.has(id)) {
       entry.ids.add(id);
+      changed = true;
+    } else if (!cacheable && entry.ids.delete(id)) {
       changed = true;
     }
   }
-  if (!changed || entry.timer) return;
-  // Write at most twice a second.
-  entry.timer = setTimeout(() => {
-    entry.timer = null;
-    if (closedTabs.has(tabId)) return; // closed in the meantime: don't store its list again
-    let ids = [...entry.ids];
-    if (ids.length > MAX_LOADED_PER_TAB) {
-      ids = ids.slice(-MAX_LOADED_PER_TAB);
-      entry.ids = new Set(ids);
-    }
-    chrome.storage.session.set({ [loadedKey(tabId)]: ids }).catch((e) => console.warn('Loaded segments:', e));
-  }, 500);
+  if (!changed) return;
+  // Batch additions, but publish removals immediately so open tabs stop collecting that part.
+  if (!cacheable) persistLoaded(tabId, entry);
+  else if (!entry.timer) entry.timer = setTimeout(() => persistLoaded(tabId, entry), 500);
 }
 
 const MEDIA_TYPE = /^(video|audio)\/|octet-stream|mp2t/i;
@@ -151,7 +154,9 @@ chrome.webRequest.onSendHeaders.addListener(
   (d) => {
     if (d.tabId < 0) return;
     const range = d.requestHeaders?.find((h) => h.name.toLowerCase() === 'range')?.value || '';
-    requestInfo.set(d.requestId, { url: d.url, range });
+    // Chrome emits onSendHeaders for each redirect under the same request ID.
+    const original = requestInfo.get(d.requestId);
+    requestInfo.set(d.requestId, { url: original?.url ?? d.url, originalRange: original?.originalRange ?? range, range });
   },
   { urls: ['<all_urls>'], types: ['xmlhttprequest', 'media', 'other'] },
   ['requestHeaders']
@@ -164,10 +169,15 @@ chrome.webRequest.onCompleted.addListener(
     if (d.tabId < 0 || d.statusCode < 200 || d.statusCode >= 300) return;
     const type = d.responseHeaders?.find((h) => h.name.toLowerCase() === 'content-type')?.value || '';
     if (/mpegurl/i.test(type) || !(MEDIA_TYPE.test(type) || MEDIA_PATH.test(d.url) || d.type === 'media')) return;
+    // A part the site told the browser not to keep isn't in Chrome's cache, so
+    // it doesn't count as loaded (taking it would mean requesting it again).
+    const header = (name) => d.responseHeaders?.filter((h) => h.name.toLowerCase() === name).map((h) => h.value || '').join(',') || '';
+    const cacheable = !/(?:^|[\s,])no-store(?:$|[\s,;])/i.test(header('cache-control')) &&
+      !header('vary').split(',').some((field) => field.trim() === '*');
     const range = info?.range || '';
     const ids = [requestId(d.url, range)];
-    if (info && info.url !== d.url) ids.push(requestId(info.url, range)); // address before a redirect
-    markLoaded(d.tabId, ids);
+    if (info && info.url !== d.url) ids.push(requestId(info.url, info.originalRange));
+    updateLoaded(d.tabId, ids, cacheable);
   },
   { urls: ['<all_urls>'], types: ['xmlhttprequest', 'media', 'other'] },
   ['responseHeaders']
@@ -210,8 +220,16 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   closedTabs.add(tabId);
   known.delete(tabId);
+  const entry = loaded.get(tabId);
   loaded.delete(tabId);
-  chrome.storage.session.remove([storageKey(tabId), loadedKey(tabId)]);
+  // Finish any storage write already in flight before removing the closed tab.
+  const remove = () => chrome.storage.session.remove([storageKey(tabId), loadedKey(tabId)]);
+  if (entry) {
+    clearTimeout(entry.timer);
+    entry.writing.then(remove);
+  } else {
+    remove();
+  }
 });
 
 // Download links (job:<id>) are valid for 30 minutes; remove older ones.

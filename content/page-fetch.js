@@ -54,8 +54,11 @@
         const res = await fetch(msg.url, init);
         const firstByte = performance.now() - started;
         const body = new Uint8Array(await res.arrayBuffer());
-        const fromCache = isCacheHit(res.url || msg.url, started, firstByte, performance.now() - started, body.length, msg.expectCached);
+        const total = performance.now() - started;
+        const fromCache = isCacheHit(res.url || msg.url, started, firstByte, total, body.length, msg.expectCached);
         const retryAfter = res.headers.get('retry-after');
+        // For the developer log: timing in this page, and HTTP/1.1, HTTP/2 or HTTP/3 (if the site shares it).
+        const entry = performance.getEntriesByName(res.url || msg.url).filter((e) => e.startTime >= started - 5).at(-1);
         port.postMessage({
           id: msg.id,
           ok: true,
@@ -63,6 +66,7 @@
           url: res.url,
           fromCache,
           headers: retryAfter ? { 'retry-after': retryAfter } : {},
+          timing: { firstByte: Math.round(firstByte), total: Math.round(total), protocol: entry?.nextHopProtocol || '' },
           body: toBase64(body),
         });
       } catch (e) {

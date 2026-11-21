@@ -8,15 +8,15 @@ field by field. The upload file is built with `node scripts/package.mjs` (see th
 1. **Developer account:** register on the dashboard (one-time registration fee) and verify your contact email.
 2. **Trader declaration:** the dashboard asks whether you are a trader under EU law. Answer for your situation;
    traders must publish contact details.
-3. **Privacy policy:** put your contact email into `store/privacy-policy.html` (replace `[your contact email]`
-   near the end) and into `store/PRIVACY.md`. Then publish it with GitHub Pages:
+3. **Privacy policy:** the contact is the repository's Issues page (keep Issues turned on in the repository
+   settings). Publish the policy with GitHub Pages:
    - Push this folder to a **public** GitHub repository.
    - In the repository: **Settings → Pages → Build and deployment → Source: Deploy from a branch**, branch
      `main`, folder `/ (root)`, **Save**.
    - After a minute the policy is at `https://<your-user>.github.io/<repository>/store/privacy-policy.html`.
      Open it once in a private window to check it loads, then paste that address in the Privacy tab.
    - The repository page itself (`https://github.com/<your-user>/<repository>`) can be the Homepage and Support URL.
-4. **Upload:** `dist/hls-stream-downloader-1.0.0.zip`.
+4. **Upload:** `dist/hls-stream-downloader-1.0.1.zip`.
 
 Note: Google allows video downloaders in the store but doesn't feature them in its promotions. The relevant
 rule is that products must not "encourage, facilitate, or enable the unauthorized access, download, or
@@ -45,7 +45,7 @@ HOW IT WORKS
 3. Click Save loaded part, Download full video, or Record for a live stream. The file goes to your Downloads folder, or the folder you chose in Settings.
 
 TWO WAYS TO SAVE
-• Save loaded part: saves what your browser has already streamed, instantly, straight from Chrome's cache. It makes no new requests to the website and keeps adding parts while the video plays.
+• Save loaded part collects cacheable parts as the player loads them. Chrome may fetch a part again if its cached copy is unavailable.
 • Download full video: also loads the parts the player hasn't loaded yet, at the speed you choose.
 
 FEATURES
@@ -57,7 +57,7 @@ FEATURES
 • Three speeds: Normal (the default: a steady pace like a video player buffering ahead, gentle on websites), Fast, or Max (no pace, up to 16 requests at a time). Choose in Settings, or switch while a download runs
 • Save to your Downloads folder, a folder you choose, or pick a place each time
 • Slows down by itself if a website answers that it's getting too many requests
-• Pauses and continues by itself if the page reloads or a signed link expires
+• Resumes after a reload or a renewed link, once it has checked that it is the same video
 • Short private download links: video addresses are never shown, and download details are deleted after saving or after 30 minutes
 • Handles standard AES-128 encrypted streams, fragmented MP4 (CMAF), byte ranges, gaps and discontinuities
 
@@ -108,7 +108,7 @@ Saves HLS video streams that the current web page plays as a video file on the u
 
 | Permission | Justification |
 |---|---|
-| `webRequest` | Observes the network requests that web pages make, to notice when a page loads an HLS video playlist (URLs ending in .m3u8, or responses with an HLS content type) and which video parts it has finished loading. Requests are never blocked or changed. Only playlist addresses and short hashes of loaded video parts are kept, in session storage for that tab, so parts already in the browser can be saved without new requests. |
+| `webRequest` | Observes the network requests that web pages make, to notice when a page loads an HLS video playlist (URLs ending in .m3u8, or responses with an HLS content type) and which video parts it has finished loading. Requests are never blocked or changed. Only playlist addresses and short hashes of loaded video parts are kept, in session storage for that tab, so parts already in the browser can be taken from its cache. |
 | `scripting` | Injects a small script into the frame that plays the video when the user opens the popup or starts a download. It requests the playlist and video segments from inside that page, so they load the same way the page's own video player loads them. |
 | `downloads` | Saves the finished video file to the user's Downloads folder. |
 | `storage` | Session storage remembers which videos and loaded parts were found on each open tab (cleared when the tab is closed) and the details of a running download, so its tab can use a short private link; those details are deleted after saving or after 30 minutes. Local storage remembers the user's settings (download speed, where to save). If the user picks a save folder in Settings, its folder handle is kept in the extension's IndexedDB. |

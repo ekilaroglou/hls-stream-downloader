@@ -1,6 +1,6 @@
 import { loadPlaylist, loadMediaPlaylist, pathKey } from './lib/download.js';
 import { connectToFrame, withCapturedPlaylists } from './lib/page-fetch.js';
-import { readLoaded, chooseLoadedVariant } from './lib/loaded.js';
+import { readLoaded, chooseLoadedVariant, loadedStats } from './lib/loaded.js';
 import { formatDuration, tokenExpiry } from './lib/util.js';
 import { icon } from './lib/icons.js';
 
@@ -88,7 +88,9 @@ function videoCard({ stream, media, variant, audioMedia, loadedPick }) {
   }
 
   const stats = loadedPick.stats;
-  const pct = Math.round(stats.fraction * 100);
+  const complete = loadedPick.complete;
+  // Rounded down: 286 of 287 parts is 99%, not 100%.
+  const pct = complete ? 100 : Math.min(99, Math.floor(stats.fraction * 100));
   const pickQuality = loadedPick.variant?.height && loadedPick.variant !== variant ? ` (${loadedPick.variant.height}p)` : '';
   return el(
     'section',
@@ -108,15 +110,15 @@ function videoCard({ stream, media, variant, audioMedia, loadedPick }) {
     el(
       'div',
       { class: 'actions' },
-      el('button', { class: 'btn primary', onclick: () => openDownloader(stream, 'loaded') }, icon('download', 16), pct >= 100 ? 'Save video' : 'Save loaded part'),
-      el('button', { class: 'btn', disabled: pct >= 100, onclick: () => openDownloader(stream, 'all') }, icon('layers', 16), 'Download full video')
+      el('button', { class: 'btn primary', onclick: () => openDownloader(stream, 'loaded') }, icon('download', 16), complete ? 'Save video' : 'Save loaded part'),
+      el('button', { class: 'btn', disabled: complete, onclick: () => openDownloader(stream, 'all') }, icon('layers', 16), 'Download full video')
     ),
     el('p', {
       class: 'hint',
       textContent:
-        pct >= 100
-          ? 'The whole video is already in your browser: it is saved right away, with no new requests.'
-          : 'Save loaded part makes no new requests and keeps adding parts while the video plays. Download full video also loads the rest from the site.',
+        complete
+          ? "The player has loaded every part. Chrome may fetch a part again if its cached copy is unavailable."
+          : "Save loaded part collects cacheable parts as the video plays. Download full video also requests the remaining parts.",
     })
   );
 }
@@ -169,7 +171,22 @@ async function main() {
       .map(async ({ stream, page }) => {
         try {
           const info = await loadMediaPlaylist(stream.url, { fetchImpl: page.fetch });
-          return { stream, ...info, loadedPick: chooseLoadedVariant(info, streams, loaded) };
+          const loadedPick = chooseLoadedVariant(info, streams, loaded);
+          // The quality the page loaded may have its own audio track.
+          let audio = info.audioMedia;
+          if (loadedPick.variant && loadedPick.variant !== info.variant) {
+            try {
+              audio = (await loadMediaPlaylist(stream.url, { variantUrl: loadedPick.variant.url, fetchImpl: page.fetch })).audioMedia;
+            } catch {
+              audio = undefined; // unknown
+            }
+          }
+          // Everything is in the browser only if every video part, and every audio part, is.
+          loadedPick.complete =
+            loadedPick.stats.count >= loadedPick.media.segments.length &&
+            audio !== undefined &&
+            (!audio || loadedStats(audio, loaded).count >= audio.segments.length);
+          return { stream, ...info, loadedPick };
         } catch (error) {
           return { stream, error };
         }
