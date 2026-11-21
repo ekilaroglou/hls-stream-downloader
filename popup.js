@@ -177,7 +177,8 @@ async function main() {
   );
 
   // Live streams first, then the longest video (trailers and previews come later).
-  const ok = videos.filter((v) => v?.media).sort((a, b) => b.media.live - a.media.live || b.media.totalDuration - a.media.totalDuration);
+  // Fast-forward previews (key frames only) aren't videos of their own.
+  const ok = videos.filter((v) => v?.media && !v.media.iframesOnly).sort((a, b) => b.media.live - a.media.live || b.media.totalDuration - a.media.totalDuration);
   const cards = ok.map(videoCard);
   if (!cards.length) cards.push(...[...videos, ...first].filter((r) => r?.error).slice(0, 2).map(errorCard));
   if (!cards.length) return showEmpty('No video found', 'Reload the page and press play. The video shows up here once it starts.');

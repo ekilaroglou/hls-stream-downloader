@@ -7,6 +7,7 @@
 // It only observes what the page loads anyway; it never sends requests itself.
 import { requestId, loadedKey } from './lib/loaded.js';
 import { iconWithCount, PLAIN_ICON } from './lib/toolbar-icon.js';
+import { streamKey, countVideos, isMasterStream } from './lib/streams.js';
 
 const PLAYLIST_URL = /\.m3u8(?:$|[?#])/i;
 const MAX_STREAMS_PER_TAB = 40;
@@ -19,29 +20,6 @@ const ownOrigin = `chrome-extension://${chrome.runtime.id}`;
 
 // In-memory "already seen" cache so repeated requests don't hit storage every time.
 const known = new Map(); // tabId -> Map(streamKey -> fingerprint)
-
-function streamKey(url) {
-  const u = new URL(url);
-  return u.origin + u.pathname;
-}
-
-// Badge count: videos, not counting quality playlists listed in a captured master.
-function countVideos(streams) {
-  const covered = new Set();
-  for (const s of streams) {
-    if (!s.text?.includes('#EXT-X-STREAM-INF')) continue;
-    for (const line of s.text.split(/\r?\n/)) {
-      const l = line.trim();
-      if (!l || l.startsWith('#')) continue;
-      try {
-        covered.add(streamKey(new URL(l, s.url).href));
-      } catch {
-        // Ignore.
-      }
-    }
-  }
-  return streams.filter((s) => !covered.has(s.key)).length;
-}
 
 // Serialize storage updates so concurrent events don't overwrite each other.
 let queue = Promise.resolve();
@@ -71,9 +49,11 @@ async function updateBadge(tabId, data) {
   }
 }
 
+// Over the size limit: drop the oldest quality playlists' texts first. Master
+// playlists are small and are what group a video's playlists together.
 function trimTexts(streams) {
   let size = streams.reduce((n, s) => n + (s.text?.length || 0), 0);
-  for (const s of [...streams].sort((a, b) => a.time - b.time)) {
+  for (const s of [...streams].sort((a, b) => isMasterStream(a) - isMasterStream(b) || a.time - b.time)) {
     if (size <= MAX_TEXT_PER_TAB) break;
     if (s.text) {
       size -= s.text.length;

@@ -17,14 +17,20 @@ single MP4 file: one click, audio included. It also records live streams.
 - Loads the video from inside the page that plays it, so requests carry the page's own origin, referrer and
   cookies, like the site's player. Nothing is spoofed.
 - Three speeds for **Download full video**: Normal (4×) and Fast (16× playback speed) load about 30 seconds ahead
-  like a player, then keep a steady pace with at most 6 new requests a second; Max loads as fast as the connection
-  allows (up to 16 requests at a time; MPEG-TS is converted to MP4 on background threads while downloading). Parts the page already loaded don't count and come from the cache. The speed
-  can be changed while a download runs.
+  like a player, then keep a steady pace with at most 6 new requests a second; Max has no pace and sends up to
+  16 requests at a time (MPEG-TS is converted to MP4 on background threads while downloading). Parts the page
+  already loaded don't count and come from the cache. The speed can be changed while a download runs.
 - If the site answers 429 or 503 ("too many requests"), no new requests start until the wait it asks for
-  (`Retry-After`) is over, and the download continues one speed slower.
+  (`Retry-After`) is over, or for a second if it gives none. Max then sends half as many requests at a time (and
+  later tries one more again, staying below the number the site turned down); Normal and Fast, and Max at one
+  request at a time, continue one speed slower. Retries wait their turn like new requests.
 - Saves to the Downloads folder, a folder you choose in Settings, or asks every time (Save As). A chosen folder is
   kept as a folder handle (Chrome never gives extensions its full path); when Chrome's access to it has lapsed, the
   download page asks with one click, or saves to Downloads instead.
+- The download page shows each step with its own progress: downloading (parts count once they are in the file,
+  converted if needed), finishing the MP4, putting the video together, waiting for another download to finish
+  saving, saving (bytes written), and Chrome finishing the file on the drive. It never shows 100% before the file
+  is saved. Saves from several download tabs take turns (Web Locks), which is quicker on hard and external drives.
 - Pauses when the page reloads or a signed link expires, and continues by itself when the video plays again.
 - The download tab opens with a short random link (`downloader.html#id`); the video address and tokens stay in
   the extension's session storage and are deleted after saving, or after 30 minutes.

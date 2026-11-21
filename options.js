@@ -73,7 +73,7 @@ function speedOption(key, s, checked) {
   const connections = s.connections === 1 ? 'one connection' : `${s.connections} connections`;
   const pace = Number.isFinite(s.speed)
     ? `Up to ${s.speed}× playback speed, ${connections}. A 10-minute video takes ${tenMinutesAt(s.speed)}.`
-    : `As fast as your connection allows, up to ${s.connections} requests at a time.`;
+    : `No pace, up to ${s.connections} requests at a time. If the site asks for fewer, it sends fewer.`;
   return option({ name: 'speed', key, label: s.label, detail: `${pace}${NOTES[key] ? ` ${NOTES[key]}` : ''}`, checked, recommended: key === DEFAULT_SPEED });
 }
 

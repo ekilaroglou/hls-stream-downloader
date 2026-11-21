@@ -5,7 +5,7 @@ import { segmentId, readLoaded, loadedKey, chooseLoadedVariant } from './lib/loa
 import { formatBytes, formatDuration, sanitizeFilename, tokenExpiry } from './lib/util.js';
 import { icon } from './lib/icons.js';
 import { workerConverter } from './lib/converter.js';
-import { saveToSetting, savedFolder, hasAccess, askAccess, writeToFolder, folderError } from './lib/save-location.js';
+import { saveToSetting, savedFolder, hasAccess, askAccess, writeToFolder, folderError, oneSaveAtATime } from './lib/save-location.js';
 
 const JOB_LIFETIME_MS = 30 * 60 * 1000; // download links (#id) work for 30 minutes
 
@@ -131,14 +131,14 @@ async function loadSpeed() {
 
 // ------------------------------------------------------------- speed switch
 
-const speedPhrase = (value) => (Number.isFinite(value) ? `at up to ${value}× playback speed` : 'as fast as possible');
+const speedPhrase = (value) => (Number.isFinite(value) ? `at up to ${value}× playback speed` : 'at Max speed');
 const runningPhase = () => `Downloading ${speedPhrase(job.pace.speed)}…`;
 
 function buildPaceOptions() {
   const group = $('pace-options');
   for (const [key, s] of Object.entries(SPEEDS)) {
     const input = Object.assign(document.createElement('input'), { type: 'radio', name: 'pace', value: key, id: `pace-${key}` });
-    const label = Object.assign(document.createElement('label'), { htmlFor: input.id, title: Number.isFinite(s.speed) ? `Up to ${s.speed}× playback speed` : 'As fast as your connection allows' });
+    const label = Object.assign(document.createElement('label'), { htmlFor: input.id, title: Number.isFinite(s.speed) ? `Up to ${s.speed}× playback speed` : `No pace, up to ${s.connections} requests at a time` });
     label.append(s.label);
     if (speedText(s.speed)) label.append(Object.assign(document.createElement('span'), { className: 'x', textContent: speedText(s.speed) }));
     group.append(input, label);
@@ -239,8 +239,10 @@ function drawCoverage() {
   main.media.segments.forEach((seg, i) => {
     const x = (time / total) * width;
     const w = (seg.duration / total) * width + 0.6;
-    const done = mode === 'loaded' ? main.collected.has(i) : i < main.next;
-    const fill = done ? gradient : mode === 'loaded' && isLoaded(seg) ? pending : null;
+    const done = mode === 'loaded' ? main.collected.has(i) : i < main.finished;
+    // Lighter: in the browser but not in the file yet (loaded by the page, or still being converted).
+    const inBrowser = mode === 'loaded' ? isLoaded(seg) : i < main.next;
+    const fill = done ? gradient : inBrowser ? pending : null;
     if (fill) {
       ctx.fillStyle = fill;
       ctx.fillRect(x, 0, w, height);
@@ -248,6 +250,38 @@ function drawCoverage() {
     time += seg.duration;
   });
   ctx.restore();
+}
+
+// After the download: putting the file together and saving it. Each step shows
+// its own progress, so the page never sits at 100% while work is still going on.
+let step = null; // { phase, fraction, short, build }
+function showStep(phase, fraction = null, short = 'Saving', extra = {}) {
+  step = { phase, fraction, short, ...extra };
+  setPhase(phase);
+  const pct = fraction === null ? '' : `${Math.min(100, Math.floor(fraction * 100))}%`;
+  $('percent').textContent = pct;
+  document.title = `${short}${pct ? ` ${pct}` : '…'} · ${pageTitle || 'video'}`;
+}
+
+// While downloading: what the download is doing right now.
+let retryNote = null; // { until, text }
+function currentPhase() {
+  if (retryNote && Date.now() < retryNote.until) return retryNote.text;
+  if (job.done >= job.total && job.waitingForConversion) {
+    const n = job.waitingForConversion;
+    return `Finishing the MP4… ${n} part${n === 1 ? '' : 's'} left`;
+  }
+  return runningPhase();
+}
+
+function onRetryWait({ delay, status }) {
+  const seconds = Math.max(1, Math.round(delay / 1000));
+  retryNote = {
+    until: Date.now() + delay,
+    text: status === 429 || status === 503 ? `The site asked to wait; continuing in ${seconds} s…` : `A part didn't arrive; trying again in ${seconds} s…`,
+  };
+  scheduleRender();
+  setTimeout(scheduleRender, delay + 50);
 }
 
 let renderQueued = false;
@@ -264,7 +298,8 @@ function renderProgress() {
   if (!job) return;
   const now = Date.now();
   const collecting = mode === 'loaded';
-  const seconds = collecting ? job.main.collectedSeconds : job.main.seconds;
+  // "Download full video": parts count once they are in the file (converted, if they needed it).
+  const seconds = collecting ? job.main.collectedSeconds : job.main.finishedSeconds;
   const bytes = collecting ? job.collectedBytes : job.bytes;
   samples.push([now, bytes]);
   while (samples.length > 2 && now - samples[0][0] > 5000) samples.shift();
@@ -284,7 +319,12 @@ function renderProgress() {
   }
   const total = job.main.media.totalDuration || 1;
   const pct = Math.min(100, Math.floor((seconds / total) * 100));
-  $('percent').textContent = `${pct}%`;
+  if (step?.build && collecting) {
+    const parts = job.sources.reduce((n, s) => n + s.finished, 0);
+    showStep(step.phase, parts / Math.max(1, job.collectedCount), step.short, { build: true });
+  }
+  if (!step) $('percent').textContent = `${pct}%`;
+  if (!step && state === 'running' && !collecting && !controller?.signal.aborted) setPhase(currentPhase());
   $('s-media').textContent = `${formatDuration(seconds)} / ${formatDuration(total)}`;
   if (collecting) {
     $('s-eta').textContent = job.collectComplete ? 'done' : 'while it plays';
@@ -346,7 +386,7 @@ async function init() {
 
   job = new StreamDownload(
     { media, audioMedia },
-    { speed: speed.speed, connections: speed.connections, onProgress: scheduleRender, onLog: log, isLoaded, onPaceChange, convert }
+    { speed: speed.speed, connections: speed.connections, onProgress: scheduleRender, onLog: log, isLoaded, onPaceChange, onRetryWait, convert }
   );
   window.addEventListener('beforeunload', guardUnload);
   renderProgress();
@@ -650,9 +690,14 @@ function showFailed(message) {
   document.title = pageTitle || 'Download video';
 }
 
-function waitForDownload(id) {
+function waitForDownload(id, onBytes = () => {}) {
   return new Promise((resolve, reject) => {
+    // Progress of Chrome writing the file.
+    const poll = setInterval(() => {
+      chrome.downloads.search({ id }).then(([item]) => item && onBytes(item.bytesReceived), () => {});
+    }, 400);
     const finish = (fn, arg) => {
+      clearInterval(poll);
       chrome.downloads.onChanged.removeListener(listener);
       fn(arg);
     };
@@ -690,12 +735,12 @@ async function loadSaveTarget() {
 const baseName = (path) => path.split(/[\\/]/).pop();
 
 // Returns the download id (null for a chosen folder) and the name the file got.
-async function saveFile(file, target) {
-  if (target.kind === 'folder') return { id: null, name: await writeToFolder(target.handle, file.name, file.blob) };
+async function saveFile(file, target, onBytes) {
+  if (target.kind === 'folder') return { id: null, name: await writeToFolder(target.handle, file.name, file.blob, onBytes) };
   const url = URL.createObjectURL(file.blob);
   try {
     const id = await chrome.downloads.download({ url, filename: file.name, conflictAction: 'uniquify', saveAs: target.kind === 'ask' });
-    await waitForDownload(id);
+    await waitForDownload(id, onBytes);
     const [item] = await chrome.downloads.search({ id });
     return { id, name: item?.filename ? baseName(item.filename) : file.name };
   } finally {
@@ -707,8 +752,9 @@ async function finishAndSave(build) {
   state = 'saving';
   page?.close();
   setStatus('run', 'Saving');
-  setPhase('Building the file…');
   setActions({});
+  // "Save loaded part" converts the collected parts now; that has its own progress.
+  showStep('Putting the video together…', mode === 'loaded' ? 0 : null, 'Finishing', { build: mode === 'loaded' });
   let result;
   try {
     result = await build();
@@ -743,7 +789,7 @@ async function finishAndSave(build) {
   const askForFolder = () => {
     const name = target.handle.name;
     setStatus('paused', 'Ready to save');
-    setPhase(`Chrome needs your OK to save in “${name}”.`);
+    showStep(`Chrome needs your OK to save in “${name}”.`, null, 'Ready to save');
     setActions({
       primary: {
         label: `Save to “${name}”`,
@@ -780,13 +826,32 @@ async function finishAndSave(build) {
     if (target.kind === 'folder' && !(await hasAccess(target.handle))) return askForFolder();
     setStatus('run', 'Saving');
     setActions({});
+    const place = { downloads: 'your Downloads folder', folder: `“${target.handle?.name}”`, ask: '' }[target.kind];
+    const label = place ? `Saving to ${place}…` : 'Saving…';
+    const totalBytes = pending.reduce((n, f) => n + f.blob.size, 0) || 1;
+    let doneBytes = 0;
     try {
-      while (pending.length) {
-        setPhase(`Saving ${pending[0].name}…`);
-        saved.push({ ...(await saveFile(pending[0], target)), file: pending[0] });
-        pending.shift();
-      }
+      await oneSaveAtATime(
+        async () => {
+          showStep(target.kind === 'ask' ? 'Choose where to save the video…' : label, target.kind === 'ask' ? null : 0);
+          while (pending.length) {
+            const file = pending[0];
+            const onBytes = (written) => {
+              const all = (doneBytes + Math.min(written, file.blob.size)) / totalBytes;
+              // Chrome still checks and moves a file written to a folder after its last byte.
+              if (target.kind === 'folder' && all >= 1) showStep('Finishing the file on the drive…', null);
+              else showStep(label, Math.min(all, 0.99));
+            };
+            saved.push({ ...(await saveFile(file, target, onBytes)), file });
+            doneBytes += file.blob.size;
+            pending.shift();
+          }
+        },
+        (ahead) => showStep(`Waiting for ${ahead === 1 ? 'another download' : `${ahead} other downloads`} to finish saving…`, null, 'Waiting')
+      );
     } catch (e) {
+      step = null;
+      $('percent').textContent = '';
       // Keep the data so saving can be retried (e.g. after closing a Save As window).
       setStatus('paused', 'Not saved');
       setPhase(target.kind === 'folder' ? folderError(e, target.handle.name) : e.message);
@@ -794,7 +859,9 @@ async function finishAndSave(build) {
       return;
     }
     state = 'done';
+    step = null;
     endSession();
+    $('percent').textContent = '100%';
     $('s-eta').textContent = 'done';
     $('s-speed').textContent = mode === 'loaded' ? 'Your browser' : '–';
     const total = saved.reduce((n, s) => n + s.file.blob.size, 0);

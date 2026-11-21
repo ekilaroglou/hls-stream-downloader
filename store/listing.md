@@ -54,7 +54,7 @@ FEATURES
 • Records live streams until you press Stop and save
 • Finds playlists by their content, so it also works when the address doesn't end in .m3u8
 • Loads the video from the page itself, with the same cookies and settings as the site's own player
-• Three speeds: Normal (the default: a steady pace like a video player buffering ahead, gentle on websites), Fast, or Max (as fast as your connection allows). Choose in Settings, or switch while a download runs
+• Three speeds: Normal (the default: a steady pace like a video player buffering ahead, gentle on websites), Fast, or Max (no pace, up to 16 requests at a time). Choose in Settings, or switch while a download runs
 • Save to your Downloads folder, a folder you choose, or pick a place each time
 • Slows down by itself if a website answers that it's getting too many requests
 • Pauses and continues by itself if the page reloads or a signed link expires
